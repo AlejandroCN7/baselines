@@ -36,18 +36,28 @@ class Runner(AbstractEnvRunner):
             # Take actions in env and look the results
             # Infos contains a ton of useful informations
             self.obs[:], rewards, self.dones, infos = self.env.step(actions)
-            for info in infos:
-                maybeepinfo = info.get('episode')
-                if maybeepinfo: epinfos.append(maybeepinfo)
+            # for info in infos:
+            #     maybeepinfo = info.get('episode')
+            #     if maybeepinfo: epinfos.append(maybeepinfo)
             mb_rewards.append(rewards)
         #batch of steps to batch of rollouts
+
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
+        aux=[]
+        for fila in mb_obs:
+            aux.append(fila[0])
+        mb_obs = np.asarray(aux, dtype=self.obs.dtype)
+
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
-        mb_actions = np.asarray(mb_actions)
-        mb_values = np.asarray(mb_values, dtype=np.float32)
-        mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
-        mb_dones = np.asarray(mb_dones, dtype=np.bool)
+        mb_actions = np.asarray([action[0] for action in mb_actions])
+        mb_values = np.asarray([value[0] for value in mb_values], dtype=np.float32)
+        mb_neglogpacs = np.asarray([neg[0] for neg in mb_neglogpacs], dtype=np.float32)
+        if type(mb_dones[0])==list:
+            mb_dones = np.asarray(mb_dones[0]+mb_dones[1:], dtype=np.bool)
+        else:
+            mb_dones=np.asarray(mb_dones,dtype=np.bool)
         last_values = self.model.value(self.obs, S=self.states, M=self.dones)
+
 
         # discount/bootstrap off value fn
         mb_returns = np.zeros_like(mb_rewards)
@@ -63,8 +73,7 @@ class Runner(AbstractEnvRunner):
             delta = mb_rewards[t] + self.gamma * nextvalues * nextnonterminal - mb_values[t]
             mb_advs[t] = lastgaelam = delta + self.gamma * self.lam * nextnonterminal * lastgaelam
         mb_returns = mb_advs + mb_values
-        return (*map(sf01, (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
-            mb_states, epinfos)
+        return mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, mb_states, epinfos
 # obs, returns, masks, actions, values, neglogpacs, states = runner.run()
 def sf01(arr):
     """
